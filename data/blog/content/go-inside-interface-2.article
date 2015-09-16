@@ -1,0 +1,235 @@
+GO Inside : Interface 2
+20 Oct 2013
+Tags: GO
+
+某某人
+
+* 
+
+【本篇贴出的源码大多位于 Reflect Package，看它的源码对理解 Interface、Reflect 的实现很有帮助。】
+
+上篇 [[http://blog.jtwsm.net/go-inside-interface-1][GO Inside : Interface 1]] 介绍了 Interface 几个使用上的注意点；这篇会深入 Interface 的实现，并探索 Reflect 是如何做到的。
+
+上篇说过，Interface 实际是由两个部分组成 (内部对象的type, 内部对象的value)， 下面会介绍它们是如何表示，以及怎么关联到一起的。
+
+
+* Type
+
+Kind Of Type
+
+ *text*
+ 简单：Bool Int ... Uint ... Uintptr Float32 Float64 Complex64 Complex128 String
+       type NewType Exist_简单
+ 复合：Ptr Func Array Interface Slice Map Struct Chan
+       type NewType Exist_复合
+
+** 简单类型描述
+
+rtype 会描述这个类型实例占用的内存大小、对齐需求、Kind 值；如果是有名称的类型，会记录它的名称和 Method 列表；如果与它对应的指针类型也被使用，ptrToThis 会指向对应的指针类型（见复合类型 ptrType）。
+
+rtype 这个结构还会被嵌入复合类型的描述结构中。
+
+	*code*
+	// rtype is the common implementation of most values.
+	rtype {
+	     size          uintptr        // size in bytes
+
+	     align         uint8          // alignment of variable with this type
+	     fieldAlign    uint8          // alignment of struct field with this type
+	     kind          uint8          // enumeration for C
+
+	     *uncommonType                // (relatively) uncommon fields
+	     ptrToThis     *rtype         // type for pointer to this type, if used in binary or has methods
+	}
+
+	// Method on non-interface type
+	method {
+	     name    *string        // name of method
+	     pkgPath *string        // nil for exported Names; otherwise import path
+	     mtyp    *rtype         // method type (without receiver)
+	     typ     *rtype         // .(*FuncType) underneath (with receiver)
+	     ifn     unsafe.Pointer // fn used in interface call (one-word receiver)
+	     tfn     unsafe.Pointer // fn used for normal method call
+	}
+
+	// uncommonType is present only for types with names or methods
+	uncommonType {
+	     name    *string  // name of type
+	     pkgPath *string  // import path; nil for built-in types like int, string
+	     methods []method // methods associated with type
+	}
+
+** 复合类型描述
+
+不同 Kind 的复合类型需要有不同的类型描述，如下
+
+	*code*
+	// ptrType represents a pointer type.
+	ptrType {
+	     rtype
+	     elem  *rtype // pointer element (pointed at) type
+	}
+
+	// funcType represents a function type.
+	funcType {
+	     rtype
+	     dotdotdot bool     // last input parameter is ...
+	     in        []*rtype // input parameter types
+	     out       []*rtype // output parameter types
+	}
+
+	// interfaceType represents an interface type.
+	interfaceType {
+	     rtype
+	     methods []imethod // sorted by hash
+	}
+
+	// imethod represents a method on an interface type
+	imethod {
+	     name    *string // name of method
+	     pkgPath *string // nil for exported Names; otherwise import path
+	     typ     *rtype  // .(*FuncType) underneath
+	}
+
+	// arrayType represents a fixed array type.
+	arrayType {
+	     rtype
+	     elem  *rtype // array element type
+	     slice *rtype // slice type
+	     len   uintptr
+	}
+
+	// sliceType represents a slice type.
+	sliceType {
+	     rtype
+	     elem  *rtype // slice element type
+	}
+
+	// mapType represents a map type.
+	mapType {
+	     rtype
+	     key   *rtype // map key type
+	     elem  *rtype // map element (value) type
+	}
+
+	// structType represents a struct type.
+	structType {
+	     rtype
+	     fields []structField // sorted by offset
+	}
+
+	// Struct field
+	structField {
+	     name    *string // nil for embedded fields
+	     pkgPath *string // nil for exported Names; otherwise import path
+	     typ     *rtype  // type of field
+	     tag     *string // nil if no tag
+	     offset  uintptr // byte offset of field within struct
+	}
+
+** 类型系统
+
+ *text*
+ 每个定义的命名的 TypeX 都会按其 Kind 增加对应的一项描述
+ 如果 *TypeX 有用到，则增加一项 ptrType，elem 指向 TypeX
+   *TypeX 变量使用（直接定义变量、取址行为）
+   TypeX 有 Method（会直接或间接使用 *TypeX，参考 [[http://blog.jtwsm.net/go-inside-function][GO Inside : Function]] ）
+   **TypeX ...
+ 如果 **TypeX 有用到，则增加一项 ptrType，elem 指向 *TypeX
+   **TypeX 变量使用（直接定义变量、取址行为）
+   ***TypeX ...
+ ...
+
+ 对于未命名的 Type 也会有类似的逻辑，区别是
+   未命名的 Type 不会有 Method
+   未命名的 Type 如果和已有某个未命名的项完全一致，则重用
+
+ func FuncA (...) (...) {...}
+ 隐式的定义了一个未命名的funcType func (...)(...)
+
+类型系统由编译器生成，编译器也会参考类型系统生成对对象的操作代码。
+类型系统还能在运行时使用，进行运行时类型识别、操作，Reflect 库就是这样做的。
+
+
+* Value
+
+Value 代表 Type 的一个运行时实例，也就是一块内存。每个 Type 都有一个内存布局方案，描述对应的 Value 内存是如何布局的。内存布局方案大部分是直接确定的，只有 struct 需要通过 Type 描述来推导。
+
+GO 不追求二进制兼容，内存布局方案在不同版本都有可能调整，但基本和 C 下面的做法很类似，尤其是实例并不包含类型信息。
+不过 interface 例外，interface 实例包含内部对象的类型信息以及自己的类型信息，这对 Reflect 机制至关重要。
+
+** 下面我们看下 interface 实例是如何布局的
+
+	*code*
+	empty interface header
+	emptyInterface {
+	     typ  *rtype
+	     word iword
+	}
+
+	normal interface header
+	nonEmptyInterface {
+	     // see ../runtime/iface.c:/Itab
+	     itab *struct {
+	          ityp   *rtype // static interface type
+	          typ    *rtype // dynamic concrete type
+	          link   unsafe.Pointer
+	          bad    int32
+	          unused int32
+	          fun    [100000]unsafe.Pointer // method table
+	     }
+	     word iword
+	}
+
+interface 实例 header 部分占用 two-word(pointer) 大小，前一个 word 包含类型信息，后一个 word 用来放置内部对象。
+
+第一个 word
+empty interface 比较特殊，它没有 method 而且 static interface 类型都是 interface{}，这样它的第一个 word 就直接指向内部对象的类型。nonempty interface 需要包含这些信息，它的第一个 word 指向一个复合结构，里面包含：static interface 类型、内部对象的类型、method table。
+
+第二个 word
+这个 word 用来存放内部对象，具体的规则是————如果内部对象大小 <= one-word 就直接存放其中；如果不能用 one-word 表示就存放在额外的内存中（header 后面），word 中存放的是指向那块内存的指针。
+
+** interface 赋值做了哪些事
+
+ *text*
+ a) 赋值给 empty interface
+ var va TypeA
+ var ia interface{} = va
+ var ib interface{} = &va
+ 
+编译器知道这个赋值需要 TypeA *TypeA 的类型信息，生成的代码里包含对这些信息的引用。
+
+赋值完成 ia 的第一个 word 指向 TypeA，第二个 word 要看 TypeA 的大小，如果 <= one-word 就直接拷贝进去，如果大于就分配额外的内存，拷贝进去再把第二个 word 指向额外的内存。
+
+赋值完成 ib 的第一个 word 指向 *TypeA，第二个 word 是 &va，因为 &va 可以用 one-word 表示。
+
+ *text*
+ b) 赋值给 nonempty interface
+ var va TypeA
+ var ia interfaceXXX = va
+ var ib interfaceXXX = &va
+
+ 第二个 word 的处理情况类似。第一个 word 复杂些
+   ia 的赋值 编译器在编译期会检查  TypeA 类型的 method table 能不能满足 interfaceXXX
+   ib 的赋值 编译器在编译期会检查 *TypeA 类型的 method table 能不能满足 interfaceXXX
+   检查的方法就是对比类型的 uncommonType 的 method table 和 interface 的 method table
+
+如果不满足，编译期会报错。如果满足就在生成的代码包含这些信息，赋值结束 type 和 mehtod table 都会被正确设置。
+
+ *text*
+ c) interface 赋值给 interface
+ var ia interfaceXXX
+ var ib interfaceYYY
+ ia = ib
+
+这个赋值要求 interfaceXXX 的 method interfaceYYY 都有，检查方法就是对比 interface 的 method table。如果不满足，编译期会报错。如果满足就在生成的代码包含这些信息，赋值的时候可能需要修改 static interface 类型 及 method table。
+
+
+* Reflect
+
+Reflect 操作的入口是 ValueOf + TypeOf，它们接受一个 interface{} 参数。也就是说 Reflect 操作的第一步是把你的对象赋值给 interface{}，这个过程就像上面描述的那样。赋值结束对象和它的类型就在这个 interface{} 对象里建立了联系，后面就可以做类型识别了，神奇吧！
+
+Reflect 使用 unsafe 特性直接操作内存，它先从 interface{} 对象解析出内部对象的 Type、Value。如果内部对象是一个复合对象，通过 Type 还可以一级级的解析下去，因为复合对象的 type 又指向子对象的 type，这样每一级都能解析出 Type、Value。
+
+
+

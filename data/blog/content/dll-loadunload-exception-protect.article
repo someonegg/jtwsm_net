@@ -1,0 +1,19 @@
+Windows DLL 加载卸载流程异常保护
+12:00 2 Nov 2013
+Tags: DLL,EXCEPTION
+
+某某人
+
+* 
+
+Windows LoadLibrary（FreeLibrary）流程包含模块的载入（载出）及模块的INIT（UNINIT）；C/C++程序的INIT（UNINIT）
+流程中又会执行全局变量的Construct（Destruct）。
+
+这两个流程都会进行异常保护（ntdll的LdrLoadDll、LdrUnloadDll中会使用SEH），异常保护可能会导致全局变量的Construct（Destruct）中的异常不被暴露：
+
+- 模块的INIT会和模块的加载绑定在一起
+- 模块的UNINIT在模块卸载时会执行
+- 如果模块不卸载（静态链接、不调用FreeLibrary）就在进程退出时执行模块的UNINIT
+
+前面两种情况都有异常保护，出现异常都不被暴露；只有最后一种情况没有异常保护，出现异常才会暴露出来。
+

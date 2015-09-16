@@ -1,0 +1,30 @@
+MFC中使用COMCTL注意点
+10:00 2 Nov 2013
+Tags: MFC
+
+某某人
+
+* 
+
+windows 提供了很多界面通用控件，它们在 comctl32.dll 中实现，程序要使用它们需要：
+
+- 加载 comctl32.dll
+- 调用 InitCommonControls（Ex）注册需要的控件窗口类型
+
+如果没有完成这两步，在调用 CreateWindow 创建对应控件时就会失败。
+
+MFC 内部机制封装了这两步，它在创建控件窗口前会去（由 AfxDeferRegisterClassAFX_WNDCOMMCTLS_REG 完成 ）：
+
+- 检查 comctl32.dll 有没有被加载，如果没有就加载它
+- 调用  InitCommonControlsEx 注册对应的控件类
+- MFC还会记录一个标志，如果是自己加载的 comctl32.dll，在自己（mfcxx.dll | 某个静态链 MFC 的模块）卸载的时候还会卸载 comctl32.dll。
+
+大部分时候MFC的机制工作良好，但如果多个静态链 MFC 的模块之间就可能会出问题：
+
+- 模块 A、B 都静态链 MFC，它们都会使用通用控件（也就是需要 comctl32.dll），它们都没有显示处理 comctl32.dll（显示的加载或静态链）。
+- A 先创建了一个控件，触发 MFC 的自动流程，加载 comctl32.dll
+- B 也需要创建控件，comctl32.dll 已经加载，它会记下 HMODULE 直接使用
+- A 模块被卸载，同时 comctl32.dll 也被卸载了，OMG
+- B 模块还在使用，但是后续的 控件操作都会出错
+
+推荐主模块（EXE）显示加载和初始化 comctl32.dll。

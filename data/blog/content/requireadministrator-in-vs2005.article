@@ -1,0 +1,51 @@
+Set "requireAdministrator" Steps in VS2005
+19:18 12 Sep 2013
+Tags: UAC,VS2005
+
+某某人
+
+* Steps
+
+1. Project properties ==> Linker ==> Manifest File ==> Generate Manifest = Yes
+
+2. Rebuild Project
+
+3. Copy $(IntDir)\$(TargetFileName).intermediate.manifest ==> $(PrjDir)\RunAsAdmin.manifest
+
+4. Edit RunAsAdmin.manifest, insert 
+
+	*code*
+	<v3:trustInfo xmlns:v3="urn:schemas-microsoft-com:asm.v3">
+	  <v3:security>
+	    <v3:requestedPrivileges>
+	      <!-- level can be "asInvoker", "highestAvailable", or "requireAdministrator" -->
+	      <v3:requestedExecutionLevel level="requireAdministrator" />
+	    </v3:requestedPrivileges>
+	  </v3:security>
+	</v3:trustInfo>
+
+to RunAsAdmin.manifest
+
+	*code*
+	<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+	<assembly xmlns='urn:schemas-microsoft-com:asm.v1' manifestVersion='1.0'>
+	  <dependency>
+	    <dependentAssembly>
+	      <assemblyIdentity type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*' />
+	    </dependentAssembly>
+	  </dependency>
+	  <v3:trustInfo xmlns:v3="urn:schemas-microsoft-com:asm.v3">
+	    <v3:security>
+	      <v3:requestedPrivileges>
+	        <!-- level can be "asInvoker", "highestAvailable", or "requireAdministrator" -->
+	        <v3:requestedExecutionLevel level="requireAdministrator" />
+	      </v3:requestedPrivileges>
+	    </v3:security>
+	  </v3:trustInfo>
+	</assembly>
+
+5. Project properties ==> Linker ==> Manifest File ==> Generate Manifest = NO
+
+Project properties ==> Manifest Tool ==> Input and Output ==> Addithional Manifest Files = RunAsAdmin.manifest
+
+6. Rebuild Project

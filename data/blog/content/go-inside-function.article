@@ -1,0 +1,142 @@
+GO Inside : Function
+12 Oct 2013
+Tags: GO
+
+某某人
+
+* 参数传递与值返回
+
+	*code*
+	func Func (va TypeA, vb TypeB) (TypeC or ra TypeC) {
+	     xxx
+	}
+
+	TypeA     size 5           align 4
+	TypeB     size 15          align 8
+	TypeC     size 2           align 1
+
+** 调用方：
+ *text*
+ a) 在栈上分配出适当的空间以能放置所有参数和返回值，计算依据Type大小和对齐需求，
+ 以上面的函数为例
+ allocSize = 0
+ va     最开始能满足所有的对齐要求，不需要考虑对齐，allocSize = size = 5
+ vb     需要以8字节对齐，allocSize = ((allocSize - 1) / align + 1) * align = 8，
+                        allocSize += size = 8 + 15 = 23
+ ra     以1字节对齐，不需要处理，allocSize += size = 23 + 2 = 25
+ allocSize = 25
+ b) 将参数拷贝到对应位置
+ c) 转到对应函数，参数块的初始地址会传递过去
+ d) 当函数返回，再把返回值从对应位置拷贝出来
+
+** 函数：
+ *text*
+ a) 参数块的初始地址会传递过来，进而就能计算出每个参数和返回值的位置
+ b) 在函数返回的时候，需要把返回的值拷到对应位置
+ c) 如果函数使用named return values，就可以在函数体内直接操作返回值对应的位置，
+    不需要在返回时拷贝
+
+
+* 可变参数实现
+
+	*code*
+	func FuncA (v ...TypeT) {
+	    FuncB(v...)
+	}
+
+	func FuncB (v ...TypeT) {
+	    ...
+	}
+
+可变参数机制是一个语法糖，vb 的实际类型是 []TypeT，FuncA变成 func FuncA (v []TypeT)
+
+在调用方，编译器会帮我们生成代码，创建出一个v []TypeT，并append进所有的可变参数，
+之后v会作为一个参数放在栈上；在函数里面代码就按[]TypeT类型访问v
+
+加粗那行...解释
+
+如果不加...，调用FuncB会再创建一个v‘ []TypeT，把v作为一个元素append进去，然后
+把v‘传递给FuncB；加了...后，会直接把v传递给FuncB
+
+语义上，如果我们想把一个[]TypeT变量里面的元素作为一个个参数传递给可变函数，
+加上...即可；实现上，编译器跳过创建v‘ []TypeT步骤，直接把v传递进去
+
+这种用法限制只有v一个可变参数，不然会报too many arguments错误
+
+
+* 直接调用与间接调用
+
+ *text*
+ a) 直接调用：通过函数标识符调用
+ FuncA()
+ 直接调用直接会转到对应地址
+ b) 间接调用：通过函数变量、interface调用
+ f := FuncAf()间接调用
+ f不指向真正的code，而是指向一个proxy对象，里面才存放真正的code地址
+ 这种模式可以用来方便的生成闭包函数， proxy对象data部分会存放每个闭包
+ 独立的数据，它的地址也会传给code，这样不同闭包就可以共用同一份code，
+ 而不需要动态代码生成（go 1.0的做法）
+
+.image go-inside-function/indirect-call.png
+
+
+* Method
+
+	*code*
+	//  value receiver
+	func (e TBase) MFuncA(...) (...) {
+	}
+
+	//  pointer receiver
+	func (e *TBase) MFuncB(...) (...) {
+	}
+
+TBase 不能是原生类型、指针类型、接口类型，且不能对其它package定义的类型增加Method
+
+针对value receiver类型的Method，编译器会帮我们生成对应pointer receiver类型的Method（反过来不行）
+例如上面的MFuncA，会有
+
+	*code*
+	//  value receiver
+	func (e *TBase) MFuncA'(...) (...) {
+	     *e.MFuncA
+	}
+
+** 调用实现
+
+	*code*
+	var e TBae
+	e.MFuncA(...)
+	//e.MFuncB(...)  // wrong，MFuncB需要pointer receiver
+	p := &e
+	e.MFuncB(...)
+	e.MFuncA(...)   // ok，编译器帮我生成了
+	f := e.MFuncA  // 生成一个闭包函数
+	f(...)
+
+ *text*
+ MFuncA 的函数类似实际上是 func (e TBase, ...) (...)
+ MFuncB 的函数类似实际上是 func (e *TBase, ...) (...)
+ receiver会作为第一个参数传递过去，实际上可以直接写
+ TBae.MFuncA(e, ...)
+ *TBase.MFuncB(p, ...)
+
+f 的函数类型是 func (...) (...)，不带receiver，它是一个闭包函数，receiver会放在每个闭包独立的数据里。
+
+** 类型系统相关
+
+类型系统会分别维护TBase，*TBase两个类型，它们有独立的Method Table
+
+上面的例子TBase类型Method Table里有一个方法{MFuncA}，*TBase类型Method Table里有二个方法{MFuncA', MFuncB}
+
+针对每个method有两个函数实现
+
+- 一个类型为 func (receiver, ...) (...)，可以支持普通对象方式发起的调用
+- 一个类型为func (one-word receiver, ...) (...)，一个wrapper，用来支持从interface发起的调用
+
+one-word receiver和interface的实现有关，固定传一个word(指针大小)，如果receiver不能用one-word表示，
+那它就是指向实际receiver指针。编译器在生成代码的时候，知道相应的receiver能不能用one-word表示，
+所以能正确解析出receiver再转调第一个函数。
+
+如果有上面例子里的闭包函数，那会再生成一个wrapper函数，用来从闭包里解析出receiver，再转调上面的函数。
+

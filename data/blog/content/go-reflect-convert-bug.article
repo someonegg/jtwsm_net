@@ -1,0 +1,77 @@
+A BUG of the reflect-package's Value.Convert method
+9 Nov 2013
+Tags: GO
+
+某某人
+
+* 
+
+更新：GO 1.2 已经修复了这个问题
+
+_func_(_v_Value_)_Convert_(_t_Type_)_Value_
+
+这个操作的效果是类型转换，如果转换可行它就返回一个 Type = t 的新 Value，如果不可行就 panic。
+
+在32位机器上，当目标类型是 int64、uint64、float64、complex64、complex128 时，或者在64位机器
+上，当目标类型是 complex128 时，由于它们都不能用一个 Pointer 表示，返回的 Value.val 中存放
+指向实际数据的指针，这要求 Value.flag 的 flagIndir 标志要置上。但Convert 的子过程 *makeInt*
+*makeFloat* *makeComplex* 都没有正确的置上这个标志，这可能导致程序逻辑错误，看下面的例子
+
+	*code*
+	func main() {
+		var a = int32(1)
+		fmt.Println(a)
+		va := reflect.ValueOf(a)
+		fmt.Println(va.Int())
+		t := reflect.TypeOf(int64(0))
+		vb := va.Convert(t) // convert to int64
+		fmt.Println(vb.Int())
+	}
+
+32位系统上输出如下，其中第3行每次还不一样
+
+	*code*
+	1
+	1
+	412623175976
+
+再看下 Value.Int() 的代码就可以知道原因了
+
+	*code*
+	func (v Value) Int() int64 {
+		k := v.kind()
+		var p unsafe.Pointer
+		if v.flag&flagIndir != 0 {
+			p = v.val
+		} else {
+			// The escape analysis is good enough that &v.val
+			// does not trigger a heap allocation.
+			p = unsafe.Pointer(&v.val)
+		}
+		switch k {
+		...
+		case Int64:
+			return int64(*(*int64)(p))
+		}
+		panic(&ValueError{"reflect.Value.Int", k})
+	}
+
+Value.Int() 逻辑依赖 flagIndir 标志是否正确的设置。在上面的例子中 v.val 中存放的就是一个指针，直接取用就行，
+但由于前面 Convert 没有置上这个标志，它会对指针再取址然后读取内容，这显然是错误的。
+
+修复也比较容易，以 makeInt 为例
+
+	*code*
+	func makeInt(f flag, bits uint64, t Type) Value {
+		typ := t.common()
+		if typ.size > ptrSize {
+			// Assume ptrSize >= 4, so this must be uint64.
+			ptr := unsafe_New(typ)
+			*(*uint64)(unsafe.Pointer(ptr)) = bits
+			+ f |= flagIndir +
+			return Value{typ, ptr, f | flag(typ.Kind())<<flagKindShift}
+		}
+		...
+	}
+
+

@@ -1,0 +1,86 @@
+{{/* This template is combined with other templates to render blog pages. */}}
+
+{{define "root"}}
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>{{template "title" .}}</title>
+	<link type="text/css" rel="stylesheet" href="/static/style.css">
+	<link rel="alternate" type="application/atom+xml" title="blog.jtwsm.net - Atom Feed" href="http://blog.jtwsm.net/feed.atom" />
+</head>
+<body>
+
+<div id="container">
+
+<div id="heading">
+	<a href="/"><img src="/static/logo.png">某某人的博客</a>
+</div><!-- #heading -->
+
+<div id="sidebar">
+	{{with .Doc}}
+		{{with .Newer}}
+			<h1>Next article</h1>
+			<p><a href="{{.Path}}">{{.Title}}</a></p>
+		{{end}}
+		
+		{{with .Older}}
+			<h1>Previous article</h1>
+			<p><a href="{{.Path}}">{{.Title}}</a></p>
+		{{end}}
+		
+		{{with .Related}}
+			<h1>Related articles</h1>
+			<ul>
+			{{range .}}
+				<li><a href="{{.Path}}">{{.Title}}</a></li>
+			{{end}}
+			</ul>
+		{{end}}
+	{{end}}
+	
+	<h1>Links</h1>
+	<ul>
+	<li><a href='http://golang.org/' target='_blank'>golang.org</a></li>
+	<li><a href='https://github.com/someonegg' target='_blank'>someonegg.github.com</a></li>
+	</ul>
+	
+	<h1>Blog Archive</h1>
+	<p><a href="/index">Article index</a></p>
+	<!-- TODO(adg): list of recent articles here? -->
+</div><!-- #sidebar -->
+
+<div id="content">
+	{{template "content" .}}
+</div><!-- #content -->
+
+<div id="footer">
+	<p>
+	The content of this page is licensed under the Creative Commons
+	Attribution 3.0 License,<br>
+	and code is licensed under a <a href="/LICENSE">BSD license</a>.<br>
+	</p>
+</div><!-- #footer -->
+
+</div><!-- #container -->
+
+</body>
+<script src="/static/jquery.js"></script>
+<script src="/static/script.js"></script>
+</html>
+{{end}}
+
+{{define "doc"}}
+	<div class="article">
+		<p class="date">{{.Time.Format "2 January 2006"}}</p>
+		<h1 class="title"><a href="{{.Path}}">{{.Title}}</a></h1>
+		{{.HTML}}
+		{{$last := sub (len .Authors) 1}}
+		<p class="author">By 
+		{{range $i, $a := .Authors}}
+			{{if gt $i 0}}{{if eq $i $last}} and {{else}}, {{end}}{{end}}
+			{{if $a.URL}}<a href="{{$a.URL}}" target="_blank">{{$a.Name}}</a>{{else}}{{$a.Name}}{{end}}
+		{{end}}
+		</p>
+	</div>
+{{end}}

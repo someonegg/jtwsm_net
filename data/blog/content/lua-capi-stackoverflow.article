@@ -1,0 +1,27 @@
+LUA 和 C/C++ 相互调用需防止堆栈溢出
+10:00 28 Nov 2013
+Tags: LUA,STACKOVERFLOW
+
+某某人
+
+* 
+
+LUA 和 C/C++ 相互调用需要通过 LUA 堆栈传递参数和返回值，C/C++ 代码对 LUA 堆栈的操作要符合规范，尤其
+要避免溢出，溢出可能会破坏宿主程序的内存数据，导致整个程序崩溃。
+
+LUA 和 C/C++ 相互调用包括 LUA 调用 C/C++ 函数 和 C/C++ 调用 LUA 函数。这两种情况下 LUA 都能保证堆栈
+有 LUA_MINSTACK 这么多可以使用空间（LUA_MINSTACK 一般被定义为 20）。只要你不是不断的把数据压栈，通常
+不用关心堆栈大小，但如果你需要压栈的数目大于 LUA_MINSTACK，一定要使用 lua_checkstack 这个函数来扩大
+可用堆栈的尺寸。
+
+下面说明下 LUA_MINSTACK 这个约定是如何保证的：
+
+1. LUA 调用 C/C++ 函数
+每次调用前，LUA 都会确保堆栈有 LUA_MINSTACK 可用空间，可以看下 luaD_precall 函数实现。
+
+2. C/C++ 调用 LUA 函数
+- LUA 在堆栈初始化的时候，会分配（BASIC_STACK_SIZE = LUA_MINSTACK * 2）堆栈空间。
+- LUA 代码执行都是由 C/C++ 这边发起的，所以在 C/C++ 第一次调用过去的时候，空间满足 LUA_MINSTACK 约定。
+- LUA 代码执行时，LUA 堆栈只会增大不会缩小，所以当 LUA 流程返回时，空间依然满足 LUA_MINSTACK 约定。
+- 当涉及到嵌套调用时，比如 C/C++ 调用过去，LUA 执行中又调用回 C/C++，会由流程 1 确保约定。
+- LUA GC 流程中会检查堆栈，当可用空间太多时会进行缩小，这个流程也会保证 LUA_MINSTACK 空间可用，这点可以看下 checkstacksizes 函数实现。

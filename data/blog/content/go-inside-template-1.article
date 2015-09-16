@@ -1,0 +1,103 @@
+GO Inside : Template 1
+26 Oct 2013
+Tags: GO
+
+某某人
+
+* 
+
+A template contains a list of nodes, these nodes can be TextNode, ActionNode, BranchNode(IfNode, RangeNode, WithNode) or TemplateNode.
+
+
+* TextNode
+
+ *code*
+ TextNode holds plain text.
+ 
+ TextNode
+ 	Text []byte : The text; may span newlines.
+
+
+* ActionNode
+
+ *code*
+ {{pipeline}}
+ 
+ ActionNode holds an action (something bounded by delimiters).
+ Control actions have their own nodes; ActionNode represents simple
+ ones such as field evaluations and parenthesized pipelines.
+ 
+ ActionNode
+ 	Pipe *PipeNode : The pipeline in the action.
+
+
+* BranchNode
+
+ *code*
+ IfNode
+ {{if pipeline}} T1 {{end}}
+ {{if pipeline}} T1 {{else}} T0 {{end}}
+ RangeNode
+ {{range pipeline}} T1 {{end}}
+ {{range pipeline}} T1 {{else}} T0 {{end}}
+ WithNode
+ {{with pipeline}} T1 {{end}}
+ {{with pipeline}} T1 {{else}} T0 {{end}}
+ 
+ BranchNode is the common representation of if, range, and with.
+ The T1(T0) can contain a list of nodes, these nodes can be TextNode,
+ ActionNode, BranchNode(IfNode, RangeNode, WithNode) or TemplateNode.
+ 
+ BranchNode
+ 	Pipe     *PipeNode : The pipeline to be evaluated.
+ 	List     *ListNode : T1.
+ 	ElseList *ListNode : T0.
+
+
+* TemplateNode
+
+ *code*
+ {{template "name"}}
+ {{template "name" pipeline}}
+ 
+ TemplateNode represents a {{template}} action.
+ 
+ TemplateNode
+ 	Name string    : The name of the template (unquoted).
+ 	Pipe *PipeNode : The command to evaluate as dot for the template.
+
+
+* Pipeline
+
+ *code*
+ pipeline:
+ 	[declarations] command ['|' command]*
+ declarations:
+ 	(normal context) $var :=
+ 	(range  context) $idx, $elem :=
+ command:
+ 	operand [space operand]*
+ operand:
+ 	term [.Field]*
+ term:
+ 	literal (number, string, nil, boolean)
+ 	function (identifier)
+ 	.
+ 	.Field
+ 	$
+ 	'(' pipeline ')'
+
+
+* PipeNode
+
+ *code*
+ [ PipeNode holds a pipeline with optional declaration. ]
+ PipeNode
+ 	Decl []*VariableNode
+ 	Cmds []*CommandNode
+ 
+ [ CommandNode holds a command (a pipeline inside an evaluating action). ]
+ CommandNode
+ 	Args []Node : Identifier, field, or constant.
+
+

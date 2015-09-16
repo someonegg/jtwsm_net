@@ -1,0 +1,23 @@
+X86+X64 Stack Frame
+11:00 2 Nov 2013
+Tags: STACK
+
+某某人
+
+* X86
+
+.image stackframe-x86-x64/x86-stack.png
+
+X86 在没有栈帧优化（FPO）的情况，通过EBP就可以完成 FrameChainWalk。（RtlCaptureStackBackTrace.RtlWalkFrameChain）
+
+
+* X64
+
+.image stackframe-x86-x64/x64-stack.png
+
+X64 在没有动态栈分配（alloca）的情况下只用ESP维护栈帧，函数开始时会为所有的局部变量、子函数调用预留好空间。
+如图所示，传递给子函数的参数及返回地址总位于栈底，参数至少保留 4个位置，如果函数是叶子函数（没有子函数调用）可以不保留。
+
+X64 的 FrameChainWalk 需要通过 ESP + PE.FunctionTable 配合完成，PE.FunctionTable 会告诉本函数的堆栈信息，
+像 ESP 预留了多少位，方便找到下一个 ESP。（RtlCaptureStackBackTrace.RtlWalkFrameChain.RtlLookupFunctionTable）
+

@@ -1,0 +1,81 @@
+GO Inside : Interface 1
+16 Oct 2013
+Tags: GO
+
+某某人
+
+* 
+
+Under the covers, interfaces are implemented as two elements, (type, value).
+The value, called the interface's dynamic value, is an arbitrary concrete value
+and the type is that of the value. For the int value 3, an interface value
+contains, schematically, (int, 3).
+
+One important detail is that the pair inside an interface always has the
+form (value, concrete type) and cannot have the form (value, interface type).
+Interfaces do not hold interface values.(*Interface == Ptr)
+
+An interface value is nil only if the inner value and type are both unset, (nil, nil).
+In particular, a nil interface will always hold a nil type. If we store a pointer of
+type *int inside an interface value, the inner type will be *int regardless of the value
+of the pointer: (*int, nil). Such an interface value will therefore be non-nil even
+when the pointer inside is nil.
+
+
+* Why is my nil error value not equal to nil?
+
+	*code*
+	func returnsError() error {
+	     var p *MyError = nil
+	     if bad() {
+	          p = ErrBad
+	     }
+	     return p // Will always return a non-nil error.
+	}
+
+	error is interface,return is (*MyError, nil),not (nil, nil).
+
+
+* Interface assignment
+
+	*code*
+	interface = value (type)
+	     valueCopy = value
+	     interface (type, valueCopy )
+
+	interface = &value (type)
+	     pointer := &value
+	     interface (*type, pointer)
+
+	interface1 = interface (type, value)
+	     interface1 (type, value)
+
+
+* Interface compare
+
+ *text*
+ a. interface's type must be : the same or one can be converted to the other
+ b. interface's value (type, value) : type == type  && value == value
+
+
+* type assert
+
+	*code*
+	field interface{}
+	...
+	var tmp int = field.(int)
+	tmp, ok := field.(int)
+	...
+	// type switch
+	switch f := field.(type) {
+	case bool:
+	     xxx
+	case float32:
+	     xxx
+	...
+	}
+
+	t := field.(type)
+	use of .(type) outside type switch
+
+

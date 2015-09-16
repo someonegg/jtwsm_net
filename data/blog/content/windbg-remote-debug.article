@@ -1,0 +1,51 @@
+windbg远程调试
+16:00 2 Nov 2013
+Tags: WINDBG
+OriginalURL: http://blog.csdn.net/wingeek/article/details/3941301
+
+转载
+http://my.csdn.net/WinGeek
+
+* 特殊用途
+
+可以在桌面切换后继续调试（WIN7以管理员权限运行、桌面锁定进入安全桌面）
+
+* 建立WinDBG server 端
+
+	*code*
+	命名管道
+	WinDBG.exe -server npipe:pipe=PipeName[,hidden][,password=Password][,IcfEnable] [-noio] [Options]
+	TCP 协议
+	WinDBG.exe -server tcp:port=Socket[,hidden][,password=Password][,ipversion=6][,IcfEnable] [-noio] [Options]
+	WinDBG.exe -server tcp:port=Socket,clicon=Client[,password=Password][,ipversion=6] [-noio] [Options]
+	串口/并口
+	WinDBG.exe -server com:port=COMPort,baud=BaudRate,channel=COMChannel[,hidden],password=Password] [-noio] [Options]
+	安全管道
+	WinDBG.exe -server spipe:proto=Protocol,certuser=Cert|machuser=Cert},pipe=PipeName[,hidden],password=Password] [-noio] [Options]
+	SSL 协议
+	WinDBG.exe -server ssl:proto=Protocol,certuser=Cert|machuser=Cert},port=Socket[,hidden],password=Password] [-noio] [Options]
+	WinDBG.exe -server ssl:proto=Protocol,certuser=Cert|machuser=Cert},port=Socket,clicon=Client[,password=Password] [-noio] [Options]
+	示例：
+	WinDBG.exe -server npipe:pipe=DbgPipe winmine.exe (使用命名管道DbgPipe 建立调试服务，调试winmine.exe 程序)
+	WinDBG.exe -server tcp:port=1025 -p 122 （使用TCP协议，在端口1025建立调试服务， 调试机器上进程号为122的程序， 或者说Attach 到122进程进行调试
+
+* 用WinDBG client 端连接服务端
+
+使用 -remote 参数可以使WinDBG 以客户端方式启动去连接服务端， 可以指定不同的连接方式。
+
+	*code*
+	命名管道
+	WinDBG.exe -remote npipe:server=Server,pipe=PipeName[,password=Password]
+	TCP 协议
+	WinDBG.exe -remote tcp:server=Server,port=Socket[,password=Password][,ipversion=6]
+	WinDBG.exe -remote tcp:clicon=Server,port=Socket[,password=Password][,ipversion=6]
+	串口/并口
+	WinDBG.exe -remote com:port=COMPort,baud=BaudRate,channel=COMChannel[,password=Password]
+	安全管道
+	WinDBG.exe -remote spipe:proto=Protocol,{certuser=Cert|machuser=Cert},server=Server,pipe=PipeName[,password=Password]
+	SSL 协议
+	WinDBG.exe -remote ssl:proto=Protocol,{certuser=Cert|machuser=Cert},server=Server,port=Socket[,password=Password]
+	WinDBG.exe -remote ssl:proto=Protocol,{certuser=Cert|machuser=Cert},clicon=Server,port=Socket[,password=Password]
+	示例 (假设被调试的机器名字是dbgPC)：
+	WinDBG.exe-remote npipe:server=dbgPC,pipe=DbgPipe (使用命名管道DbgPipe 建立连接被调试机器dbgPC)
+	WinDBG.exe-remote tcp:server=dbgPC,port=1025 （使用TC协议, 连接被调试机器dbgPC的端口1025）

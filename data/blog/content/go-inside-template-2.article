@@ -1,0 +1,190 @@
+GO Inside : Template 2
+29 Oct 2013
+Tags: GO
+
+某某人
+
+* Parse
+
+src/pkg/text/template/parse/
+
+	*text*
+
+	1. parse : (in template t)
+
+	  loop until EOF
+	    if {{define xxx}}
+	      new template t2
+	      t2.parseDefinition[2]
+	    n = textOrAction[4]
+	    if n == {{end}} or {{else}}
+	      panic
+	    t.Root.append(n)
+
+	2. parseDefinition : (in template t)
+	  ls, nn = itemList[3]
+	  if nn != {{end}}
+	    panic
+	  t.Root = ls
+
+	3. itemList : (out ListOfNode, NextNode)
+	  ls ListOfNode
+	  loop
+	    n = textOrAction[4]
+	    if n == {{end}} or {{else}}
+	      return ls, n
+	    ls.append(n)
+
+	4. textOrAction : (out Node)
+	  t = next token
+	  if t == text
+	    return newText
+	  else if t == {{
+	    return action[5]
+	  else
+	    panic
+
+	5. action
+	  t = next token
+	  if t == else
+	    return {{else}}
+	  else if t == end
+	    return {{end}}
+	  else if t == if
+	    return ifControl[6]
+	  else if t == range
+	    return rangeControl[6]
+	  else if t == with
+	    return withControl[6]
+	  else if t == template
+	    return templateControl
+	  else
+	    p = pipeline[8]
+	    return ActionNode{p}
+
+	6. ifControl + rangeControl + withControl
+	  parseControl[7]
+
+	7. parseControl
+	  p = pipeline[8]
+	  ls, nn = itemList[3]
+	  if nn == nodeElse
+	    elseLs, nn = itemList[3]
+	  return BranchNode{p, ls, elseLs}
+
+	8. pipeline
+
+	  pipeline:
+	     [declarations] command ['|' command]*
+	  declarations:
+	     (normal context) $var :=
+	     (range  context) $idx, $elem :=
+	  command:
+	     operand [space operand]*
+	  operand:
+	     term [.Field]*
+	  term:
+	     literal (number, string, nil, boolean)
+	     function (identifier)
+	     .
+	     .Field
+	     $
+	     '(' pipeline ')'
+
+
+* Exec
+
+src/pkg/text/template/
+
+	*text*
+
+	1. walk : (in dot, node)
+	  switch node.type
+	    case TextNode
+	      output text
+	    case ActionNode
+	      evalPipeline[5](dot, node.Pipe)
+	    case IfNode
+	      walkIfOrWith[2]
+	    case WithNode
+	      walkIfOrWith[2]
+	    case RangeNode
+	      walkRange[3]
+	    case TemplateNode
+	      walkTemplate[4]
+	    case ListNode
+	      loop list
+	        walk[1](dot, subNode)
+
+	2. walkIf : (in dot, node)
+	  val = evalPipeline[5](dot, node.Pipe)
+	  if val is true
+	    walk[1](dot, node.List)
+	  else
+	    walk[1](dot, node.ElseList)
+
+	2. walkWith : (in dot, node)
+	  val = evalPipeline[5](dot, node.Pipe)
+	  if val is true
+	    walk[1](val, node.List)
+	  else
+	    walk[1](val, node.ElseList)
+
+	3. walkRange : (in dot, node)
+	  val = evalPipeline[5](dot, node.Pipe)
+	  if val.Len() > 0
+	    key,val = range val
+	      walk[1](val, node.List)
+	  else
+	    walk[1](dot, node.ElseList)
+
+	4. walkTemplate : (in dot, node)
+	  tmpl = find tmpl with name node.Name
+	  dot = evalPipeline[5](dot, node.Pipe)
+	  walk[1](dot, tmpl.Root)
+
+	5. evalPipeline : (in dot, pipe PipeNode)
+	  cmd = range pipe.Cmds
+	    lastValue = evalCommand[6](dot, cmd, lastValue)
+
+	6. evalCommand : (in dot, cmd, final) (value)
+	  .f1.f2.f3  args  evalFieldNode[7]
+	  (p).f2.f3  args  evalChainNode[8]
+	  $f1.f2.f3  args  evalVariableNode[9]
+	  fun_xxx    args  evalFunction[12]
+	  (xxx)      args  evalPipeline[5]
+
+	7. evalFieldNode : (in field FieldNode)
+	  evalFieldChain[10](dot, field.Ident)
+
+	8. evalChainNode : (in chain ChainNode)
+	  p = evalArg[14](dot, chain.Node)
+	  evalFieldChain[10](p, chain.Field)
+
+	9. evalVariableNode : (in variable VariableNode)
+	  val = find value variable.Ident[0]
+	  evalFieldChain[10](val, variable.Ident[1:])
+
+	10. evalFieldChain
+	  loop chain
+	    evalField[11]
+
+	11. evalField
+	  if Method
+	    evalCall[13]
+	  else
+	    return Field
+
+	12. evalFunction
+	  fun = find function
+	  evalCall[13]
+
+	13. evalCall : (in fun, args, final) (value)
+	  prepare args : evalArg[14]
+	  rets = fun.Call
+	  return rets[0]
+
+	14. evalArg
+	  like evalCommand[6], don't support ChainNode
+
+
